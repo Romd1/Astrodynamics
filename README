@@ -1,0 +1,46 @@
+# Astrodynamics
+
+Course project for **Astrodynamics**, focused on applying orbital mechanics and numerical methods through Python.
+
+## Course
+
+**Astrodynamics**
+
+The course covers the fundamentals of orbital mechanics, including the mathematical and computational methods used to model and analyze spacecraft trajectories.
+
+## Project
+
+The `SOL_Python` directory contains the main Python project developed for the course.
+
+```text
+Astrodynamics/
+├── SOL_Python/
+│   ├── ...
+│   └── ...
+├── README.md
+├── requirements.txt
+└── .gitignore
+```
+
+The project uses Python to implement and explore astrodynamics concepts through numerical calculations and simulations.
+
+## Topics
+
+* Orbital mechanics
+* Keplerian orbits
+* Two-body problem
+* Orbital propagation
+* Numerical methods
+* Spacecraft trajectories
+* Python-based simulations
+
+## Technologies
+
+* Python
+* NumPy
+* SciPy
+* Matplotlib
+
+## Project status
+
+Coursework in progress.

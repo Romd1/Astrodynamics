@@ -118,6 +118,21 @@ def main():
     print("-" * 118)
     print(f"{'':>90}1/4 circumference: sum = {np.nansum(segment_dist[1:]):.1f} km")
 
+    phi_geod = 5.3606 # [°]
+    lam = 138.7274 # [°]
+    H_MSL = 3776 # [m]
+
+    R_sat, phi_geoc, R_e, R_N, R_M, x0, z0 = geod_to_pos(phi_geod, lam, H_MSL/1000)
+
+    R_top = R_sat.ravel()
+
+    x, y, z = R_top[0], R_top[1], R_top[2]
+    print(f"x: {x:.4f} km")
+    print(f"y: {y:.4f} km")
+    print(f"z: {z:.4f} km")
+
+    # z = 592.2501 km != H_MSL = 3.7 km because z represents the vertical elevation relative to the equatorial plane in the ECEF frame of reference, which is very different from the altitude H_MSL which is the height above the ellipsoid
+
 
 if __name__ == "__main__":
     main()

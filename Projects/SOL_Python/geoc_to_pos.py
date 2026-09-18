@@ -25,7 +25,7 @@ from SOL_Tools.AstroConstants import *  # all variales
 from SOL_Tools.Math_tools import * 
 
 
-def geoc_to_pos(phi_geoc, lambda_=0.0, h_geoc=0.0, a=6378.137, b=6356.75231424518):
+def geoc_to_pos(phi_geoc, lambda_=0.0, h_geoc=0.0, a=Earth.r1_km, b=Earth.r2_km):
     """
     Parameters
     ----------

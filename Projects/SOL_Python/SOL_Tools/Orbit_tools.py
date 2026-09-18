@@ -458,3 +458,42 @@ def sun_vector_eci(epoch, km=True):
     return np.array([r * np.cos(dec) * np.cos(ra),
                      r * np.cos(dec) * np.sin(ra),
                      r * np.sin(dec)])
+
+def ECEF_to_AER(RV_ECEF, lat_geod, lon):
+    """
+    Converts an ECEF vector into Azimuth, Elevation, Range and SEZ.
+
+    Inputs
+    ------
+    RV_ECEF : ndarray
+        Position vector in ECEF frame [km].
+    lat_geod : float
+        Geodetic latitude [deg].
+    lon : float
+        Longitude [deg].
+
+    Returns
+    -------
+    Azim : float
+        Azimuth [deg].
+    Elev : float
+        Elevation [deg].
+    Range : float
+        Distance [km].
+    SEZ : ndarray
+        Vector expressed in the local South-East-Zenith frame.
+    """
+
+    # ECEF -> SEZ transformation
+    SEZ = RotY(lat_geod-90) @ RotZ(-lon) @ RV_ECEF
+
+    # Range
+    Range = np.linalg.norm(SEZ)
+
+    # Azimuth
+    Azim = atan2d(SEZ[1], -SEZ[0]) % 360
+
+    # Elevation
+    Elev = asind(SEZ[2] / Range)
+
+    return Azim, Elev, Range, SEZ

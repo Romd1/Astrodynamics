@@ -128,8 +128,6 @@ def Sph2Cart(az, el, r = 1.0, stack = True):
     else:
         return x, y, z
 
-# end of Sph2Cart()
-
 
 def Cart2Sph(xyz):
     """
@@ -147,6 +145,9 @@ def Cart2Sph(xyz):
 
     lat : ndarray
         Latitude / declination / elevation [deg].
+
+    r : ndarray
+        Range
     """
 
     x = xyz[0, :]
@@ -158,9 +159,7 @@ def Cart2Sph(xyz):
     lon = np.degrees(np.arctan2(y, x)) % 360.0
     lat = np.degrees(np.arcsin(z / r))
 
-    return lon, lat
-
-# end of Cart2Sph()
+    return lon, lat, r
 
 
 def GreatCircle2(lat1, lon1, lat2, lon2, t=None):
@@ -235,7 +234,7 @@ def GreatCircle2(lat1, lon1, lat2, lon2, t=None):
         c1 * z1 + c2 * z2,
     ))
 
-    GC_lon, GC_lat = Cart2Sph(GC_xyz)
+    GC_lon, GC_lat, _ = Cart2Sph(GC_xyz)
 
     # Great-circle navigation quantities
     lon12 = lon2 - lon1
@@ -316,7 +315,7 @@ def SmallCircle(az, el, alpha, t=None):
 
     xyz = np.vstack((x, y, z))
 
-    lon, lat = Cart2Sph(xyz)
+    lon, lat, _ = Cart2Sph(xyz)
 
     return lat, lon, xyz
 

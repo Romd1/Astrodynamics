@@ -42,7 +42,7 @@ from SOL_Tools.Math_tools import *
 
 from geod_to_pos import geod_to_pos
 
-def geod_to_geoc(phi_geod, a=6378.137, b=6356.75231424518, h0=0.0):
+def geod_to_geoc(phi_geod, a=Earth.r1_km, b=Earth.r2_km, h0=0.0):
     """
     Parameters
     ----------

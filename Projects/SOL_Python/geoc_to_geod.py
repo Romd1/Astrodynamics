@@ -29,7 +29,7 @@ from SOL_Tools.AstroConstants import *  # all variales
 from SOL_Tools.Math_tools import * 
 
 
-def geoc_to_geod(R_ECEF, a=None, b=None, method=2, tol=1e-14):
+def geoc_to_geod(R_ECEF, a=Earth.r1_km, b=Earth.r2_km, method=2, tol=1e-14):
     """
     Parameters
     ----------
@@ -84,9 +84,6 @@ def geoc_to_geod(R_ECEF, a=None, b=None, method=2, tol=1e-14):
     if R_ECEF.ndim == 1:
         R_ECEF = R_ECEF.reshape(3, 1)
 
-    if a is None or b is None:
-        a = Earth.r1_km
-        b = Earth.r2_km
 
     e2 = 1 - (b / a) ** 2     # first eccentricity squared
     e_2 = (a / b) ** 2 - 1    # second eccentricity squared == e2 / (1 - e2)

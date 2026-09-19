@@ -1,5 +1,5 @@
 import numpy as np
-from tracking import * # Definit les classes et methodes propres à un observateur et une cible
+from SOL_Tools.Tracking_Obj import * # Definit les classes et methodes propres à un observateur et une cible
 
 
 R_ECEF_sat = np.array([1457.6991, -4505.404, 4858.8987]) # Position de l'Iss à l'époque ou elle est la plus proche

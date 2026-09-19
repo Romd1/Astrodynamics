@@ -10,36 +10,36 @@ The course covers the fundamentals of orbital mechanics, including the mathemati
 
 ## Project
 
-The `SOL_Python` directory contains the main Python project developed for the course.
+The `SOL_Python` directory contains the Python tools developed for the course along the homeworks given during the semester.
 
 ```text
-Astrodynamics/
+Projects/
 ├── SOL_Python/
-│   ├── ...
-│   └── ...
+│   ├── AstroConstants.py
+│   ├── Graph_tools.py
+│   ├── Math_tools.py
+│   ├── Orbit_tools.py
+│   └── Tracking_Obj.py
 ├── README.md
-├── requirements.txt
 └── .gitignore
 ```
 
 The project uses Python to implement and explore astrodynamics concepts through numerical calculations and simulations.
 
-## Topics
 
-* Orbital mechanics
-* Keplerian orbits
-* Two-body problem
-* Orbital propagation
-* Numerical methods
-* Spacecraft trajectories
-* Python-based simulations
 
-## Technologies
+## Homeworks
 
-* Python
-* NumPy
-* SciPy
-* Matplotlib
+# Week 1
+Plot a SEZ on Quebec City and compute the differences between Geocentric and Geodesic.
+- creation of Sol_Rotations.py plot a view of the earth.
+- creation of geocVSgeod.py and related conversion methods.
+
+# Week 2
+Assess the AER of the Iss at a given epoch from Quebec City, and find its sub-satellite point.
+- creation of Tracking_Obj.py defines Observer and Target class.
+- creation of isspathing.py containing the actual computations for the homework.
+- add some usefull Orbit and Math tools.
 
 ## Project status
 

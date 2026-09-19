@@ -2,7 +2,7 @@ import numpy as np
 from SOL_Tools.Math_tools import * 
 from SOL_Tools.Orbit_tools import * 
 
-from tracking import *
+from Projects.SOL_Python.SOL_Tools.Tracking_Obj import *
 
 R_geoc = geod_to_pos(45,0 , 1000)
 

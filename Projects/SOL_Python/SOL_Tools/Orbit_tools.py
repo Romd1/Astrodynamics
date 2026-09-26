@@ -15,32 +15,15 @@ from SOL_Tools.Math_tools import *
 def OrbitPropagation_2BN(SV, time_s):
 # Computes orbit solving Newton's equation on time vector
 
-    t_span = np.array([time_s[0], time_s[-1]])
+    # → see https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.solve_ivp.html
 
-    # Solve using RK45 (Python's ode45 equivalent)
-    sol = solve_ivp(Rates_Newton, t_span, SV, t_eval=time_s, method='RK45', rtol=1e-10, atol=1e-12)
-
-    # (here ".y" does not mean the 2nd 3D dimension)
-    ECI_pos_2BN = sol.y[0:3, :]  # first 3 elements
-    ECI_vel_2BN = sol.y[3:6, :]  # last 3 elements
-
-    return ECI_pos_2BN, ECI_vel_2BN
+      return ECI_pos_2BN, ECI_vel_2BN
 
 def Rates_Newton(t, z):
+    return
+  
 
-    r_vec = z[0:3]
-    v_vec = z[3:6]
-
-    r = norm(r_vec)
-
-    dzdt = np.zeros(6)
-    dzdt[0:3] = v_vec
-    dzdt[3:6] = -Earth.mu * r_vec / r**3
-
-    return dzdt
-
-
-def OrbitPropagation_2BK(a, e, i, RAAN, w, M0, t_array, mu):
+def OrbitPropagation_2BK(COE, t_array, mu):
 # Two-Body Keplerian Orbit Propagation from COEs
     """
     Propagate an elliptic orbit using the two-body Keplerian method.
@@ -147,7 +130,7 @@ def KeplerSolver(M, e, tol=1e-12, max_iter=50):
     return E, nu
 
 
-def COE_to_SV(a, e, i, RAAN, w, nu, mu):
+def COE_to_SV(COE, mu):
     """
     Convert classical orbital elements to inertial position and velocity (ECI)
 
@@ -165,15 +148,15 @@ def COE_to_SV(a, e, i, RAAN, w, nu, mu):
         V : inertial velocity vector [km/s]
     """
 
-    p = a * (1.0 - e**2)  # ellipse semi-latus rectum
-    rho = p / (1.0 + e * cosd(nu))  # radius in ellipse at ν
+    p = COE.a * (1.0 - COE.e**2)  # ellipse semi-latus rectum
+    rho = p / (1.0 + COE.e * cosd(COE.nu))  # radius in ellipse at ν
 
     # State vectors in perifocal frame
-    r_PQW = np.array([rho * cosd(nu), rho * sind(nu), 0.0])
-    v_PQW = np.sqrt(mu / p) * np.array([-sind(nu), e + cosd(nu), 0.0])
+    r_PQW = np.array([rho * cosd(COE.nu), rho * sind(COE.nu), 0.0])
+    v_PQW = np.sqrt(mu / p) * np.array([-sind(COE.nu), COE.e + cosd(COE.nu), 0.0])
 
     #--- Rotation from perifocal PQW frame to inertial ECI frame
-    Rot_PQW_to_ECI = RotZ(RAAN) @ RotX(i) @ RotZ(w)
+    Rot_PQW_to_ECI = RotZ(COE.RAAN) @ RotX(COE.i) @ RotZ(COE.w)
 
     R = Rot_PQW_to_ECI @ r_PQW
     V = Rot_PQW_to_ECI @ v_PQW  
@@ -371,24 +354,13 @@ def _to_unix(dt):
 
 
 
-"""Apparent geocentric right ascension and declination of the Sun.
-
-Low-precision analytic model (Vallado, Algorithm 29, Section 5.1), derived
-from the Astronomical Almanac's abridged series. Accurate to roughly
-0.01 degrees in RA/Dec over 1950-2050 -- fine for lighting a globe, sizing
-an eclipse cone, or a first-cut beta-angle calculation. Not adequate where
-sub-arcsecond astrometry is required; use a JPL DE ephemeris for that.
-"""
-
-
-JD_J2000 = 2451545.0
-DAYS_PER_JULIAN_CENTURY = 36525.0
-SECONDS_PER_DAY = 86400.0
-AU_KM = 149597870.700
-
-
-def sun_radec(epoch, degrees=True):
+def Sun_Ephemerides(epoch):
     """Apparent RA and declination of the Sun, geocentric, mean equinox of date.
+    Apparent geocentric right ascension and declination of the Sun.
+
+    Low-precision analytic model (Vallado, Algorithm 29, Section 5.1), derived from the Astronomical Almanac's abridged series.
+    Accurate to roughly 0.01° in RA/Dec over 1950-2050 -- fine for lighting a globe, sizing an eclipse cone, or a first-cut beta-angle calculation.
+    Not adequate where sub-arcsecond astrometry is required; use a JPL DE ephemeris for that.
 
     Parameters
     ----------
@@ -413,24 +385,15 @@ def sun_radec(epoch, degrees=True):
     >>> bool(23.0 < dec < 23.5)          # near the June solstice
     True
     """
-    jd = julian_date(epoch)
-    t = (jd - JD_J2000) / DAYS_PER_JULIAN_CENTURY
+    JD = julian_date(epoch)
+    t = (JD - JD_J2000) / DAYS_PER_JULIAN_CENTURY
 
     # Mean longitude and mean anomaly of the Sun, degrees.
     lam_mean = np.mod(280.460 + 36000.771 * t, 360.0)
     m_sun = np.radians(np.mod(357.5291092 + 35999.05034 * t, 360.0))
 
     # Ecliptic longitude, corrected for the equation of centre.
-    lam_ecl = np.radians(
-        lam_mean
-        + 1.914666471 * np.sin(m_sun)
-        + 0.019994643 * np.sin(2.0 * m_sun)
-    )
-
-    # Sun-Earth distance, AU.
-    r_au = (1.000140612
-            - 0.016708617 * np.cos(m_sun)
-            - 0.000139589 * np.cos(2.0 * m_sun))
+    lam_ecl = np.radians(lam_mean + 1.914666471 * np.sin(m_sun) + 0.019994643 * np.sin(2.0 * m_sun))
 
     # Obliquity of the ecliptic, mean of date.
     eps = np.radians(23.439291 - 0.0130042 * t)
@@ -438,12 +401,14 @@ def sun_radec(epoch, degrees=True):
     # Ecliptic -> equatorial. The Sun's ecliptic latitude is taken as zero,
     # which costs at most about 1 arcsecond.
     sin_lam = np.sin(lam_ecl)
-    ra = np.mod(np.arctan2(np.cos(eps) * sin_lam, np.cos(lam_ecl)), 2.0 * np.pi)
-    dec = np.arcsin(np.sin(eps) * sin_lam)
+    RA = np.mod(np.arctan2(np.cos(eps) * sin_lam, np.cos(lam_ecl)), 2.0 * np.pi)
+    Dec = np.arcsin(np.sin(eps) * sin_lam)
 
-    if degrees:
-        return np.degrees(ra), np.degrees(dec), 0, r_au
-    return ra, dec, 0, r_au
+    # Sun-Earth distance, AU.
+    R_AU = 1.000140612 - 0.016708617 * np.cos(m_sun) - 0.000139589 * np.cos(2.0 * m_sun)
+    Dist_km = R_AU / Earth.AU
+
+    return DEG(RA), DEG(Dec), R_AU
 
 
 def sun_vector_eci(epoch, km=True):
@@ -497,3 +462,191 @@ def ECEF_to_AER(RV_ECEF, lat_geod, lon):
     Elev = asind(SEZ[2] / Range)
 
     return Azim, Elev, Range, SEZ
+
+
+def geod_to_pos(phi_geod, lam=0.0, h_geod=0.0, a = Earth.r1_km, b = Earth.r2_km):
+    """
+    Convert geodetic latitude to Cartesian position vector and
+    geocentric latitude at a given geodetic height above an ellipsoid.
+
+    Parameters
+    ----------
+    phi_geod : float or array_like
+        Geodetic latitude [deg].
+
+    lam : float or array_like, optional
+        Longitude [deg], east-positive.
+        Default = 0 deg.
+
+    h_geod : float or array_like, optional
+        Geodetic height above the reference ellipsoid [km].
+        Default = 0 km.
+
+    a : float, optional
+        Semi-major (equatorial) radius of the ellipsoid [km].
+        Default = 6378.137 km (WGS84).
+
+    b : float, optional
+        Semi-minor (polar) radius of the ellipsoid [km].
+        Default = 6356.75231424518 km (WGS84).
+
+    Returns
+    -------
+    R_sat : ndarray
+        Cartesian position vector [x, y, z] [km].
+        Shape is (3,) for scalar input and (3, N) for vector input.
+
+    phi_geoc : float or ndarray
+        Geocentric latitude [deg].
+
+    R_e : float or ndarray
+        Distance from ellipsoid center to surface along the
+        geocentric radial direction [km].
+
+    R_N : float or ndarray
+        Prime vertical radius of curvature [km].
+
+    R_M : float or ndarray
+        Meridian radius of curvature [km].
+
+    x0 : float or ndarray
+        Auxiliary x-coordinate from the ellipsoid geometry [km].
+
+    z0 : float or ndarray
+        Auxiliary z-coordinate from the ellipsoid geometry [km].
+
+    Notes
+    -----
+    Based on the same equations as the MATLAB geod_to_pos function.
+    Angles are supplied in degrees.
+    """
+
+    # Convert inputs to NumPy arrays to allow vectorized operations
+    phi_geod = np.asarray(phi_geod, dtype=float)
+    lam      = np.asarray(lam, dtype=float)
+    h_geod   = np.asarray(h_geod, dtype=float)
+
+    if np.any(lam > 360.0):
+        raise ValueError("geod_to_pos: second argument lambda is out of bounds.")
+
+    # First eccentricity squared
+    e2 = 1.0 - (b / a)**2
+
+    # Prime vertical radius of curvature R_N(phi)
+    #
+    # R_N = a / sqrt(1 - e^2 sin^2(phi))
+    sin_phi = np.sin(np.deg2rad(phi_geod))
+    cos_phi = np.cos(np.deg2rad(phi_geod))
+
+    R_N = a / np.sqrt(1.0 - e2 * sin_phi**2)
+
+    # Cartesian coordinates:
+    #
+    # x = (R_N + h) cos(phi) cos(lambda)
+    # y = (R_N + h) cos(phi) sin(lambda)
+    # z = ((b/a)^2 R_N + h) sin(phi)
+    cos_lam = np.cos(np.deg2rad(lam))
+    sin_lam = np.sin(np.deg2rad(lam))
+
+    x = (R_N + h_geod) * cos_phi * cos_lam
+    y = (R_N + h_geod) * cos_phi * sin_lam
+    z = ((b / a)**2 * R_N + h_geod) * sin_phi
+
+    R_sat = np.array([x, y, z])
+
+    # Geocentric latitude
+    phi_geoc = atand(tand(phi_geod) * (R_N * (b / a)**2 + h_geod) / (R_N + h_geod))
+
+    # Auxiliary ellipsoidal quantities
+    z_sub = (b / a)**2 * R_N * sin_phi
+
+    r_delta = R_N * cos_phi
+    r_K_    = R_N * sin_phi
+
+    z0 = z_sub - r_K_
+    x0 = e2 * r_delta
+
+    # Radius from ellipsoid center to the ellipsoid surface along the corresponding geocentric radial direction
+    R_e = a * np.sqrt(((1.0 - e2)**2 * sin_phi**2 + cos_phi**2) / (1.0 - e2 * sin_phi**2))
+
+    #--- Meridian radius of curvature
+    R_M = a * (1.0 - e2) / (1.0 - e2 * sin_phi**2)**1.5
+
+    return R_sat, phi_geoc, R_e, R_N, R_M, x0, z0
+
+
+
+def geoc_to_pos(phi_geoc, lam=0.0, h_geoc=0.0, a = Earth.r1_km, b = Earth.r2_km):
+    """
+    Convert geocentric latitude and longitude to Cartesian position vector.
+
+    Parameters
+    ----------
+    phi_geoc : float or array_like
+        Geocentric latitude [deg].
+
+    lam : float or array_like, optional
+        Longitude [deg], east-positive.
+        Default = 0 deg.
+
+    h_geoc : float or array_like, optional
+        Altitude above the ellipsoid measured along the
+        geocentric radial direction [km].
+        Default = 0 km.
+
+    a : float, optional
+        Semi-major (equatorial) radius of the ellipsoid [km].
+        Default = 6378.137 km.
+
+    b : float, optional
+        Semi-minor (polar) radius of the ellipsoid [km].
+        Default = 6356.75231424518 km.
+
+    Returns
+    -------
+    R : ndarray
+        Cartesian position vector [x, y, z] [km].
+        Shape is (3,) for scalar input and (3, N) for vector input.
+
+    r_geoc : float or ndarray
+        Distance from the center of the ellipsoid to its surface
+        along the specified geocentric latitude [km].
+
+    Notes
+    -----
+    The altitude h_geoc is measured along the geocentric radial
+    direction, not along the ellipsoid normal.
+
+    For a spherical body (a == b), this reduces to the usual
+    spherical-to-Cartesian transformation with radius a + h_geoc.
+    """
+
+    # Convert inputs to NumPy arrays for vectorized calculations
+    phi_geoc = np.asarray(phi_geoc, dtype=float)
+    lam      = np.asarray(lam, dtype=float)
+    h_geoc   = np.asarray(h_geoc, dtype=float)
+
+    # --------------------------------------------------------------
+    # Radius of ellipsoid along the geocentric direction
+    #
+    # r_geoc = a / sqrt(1 + ((a/b)^2 - 1) sin^2(phi_geoc))
+    sin_phi = np.sin(np.deg2rad(phi_geoc))
+    cos_phi = np.cos(np.deg2rad(phi_geoc))
+
+    r_geoc = a / np.sqrt(1.0 + ((a / b)**2 - 1.0) * sin_phi**2)
+
+    # Longitude trigonometric terms
+    cos_lam = np.cos(np.deg2rad(lam))
+    sin_lam = np.sin(np.deg2rad(lam))
+
+    #--- Cartesian coordinates
+
+    rho = r_geoc + h_geoc
+
+    x = rho * cos_phi * cos_lam
+    y = rho * cos_phi * sin_lam
+    z = rho * sin_phi
+
+    R = np.array([x, y, z])
+
+    return R, r_geoc

@@ -15,6 +15,13 @@ import numpy as np
 
 EXPAND_FACTOR = 1.005  # factor to make radius vectors slightly larger so that he line can be seen at the surface of the Earth
 
+JD_J2000 = 2451545.0
+DAYS_PER_JULIAN_CENTURY = 36525.0
+SECONDS_PER_DAY = 86400.0
+AU_KM = 149597870.700
+
+SUN_DISTANCE = 1.0e9  # [km] Only the direction matters for a directional light, but a large value keeps the geometry unambiguous.
+
 
 class Earth:
     
@@ -22,6 +29,11 @@ class Earth:
 
     r1_km = 6378.137  # [km]  Earth equatorial radius ; Radius (at sea level) at equator
     r2_km = 6356.75231424518  # [km]  Earth polar radius (at sea level)
+
+    if False: # artificially shrinks Earth's polar radius for geometry validation
+        print('*** Artificially scaling down Earth’s polar radius ***')
+        r2_km *= 0.8
+    sf = r2_km / r1_km  # scale factor
 
     # Eccentricity of the Earth's oblate ellipsoidal shape  e ≡ √(1 – (b/a)²) = sin(θ)
     ecc = np.sqrt(1 - (r2_km / r1_km)**2)  # [n.u.] 

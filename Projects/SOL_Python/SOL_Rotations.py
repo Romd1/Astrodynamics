@@ -1,6 +1,6 @@
-# ╭───────────────────╮
-# │  SOL_Orbit_2B.py  │ Two-Body unperturbed orbital propagation
-# ╰───────────────────╯
+# ╭────────────────────╮
+# │  SOL_Rotations.py  │ Two-Body unperturbed orbital propagation
+# ╰────────────────────╯
 #  © SpaceOrbitLAB 
 """
 # (Header to include here)
@@ -12,7 +12,7 @@ SOL_Tools/
   ├─ AstroConstants.py
   ├─ Orbit_tools.py
   ├─ Math_tools.py
-  └─ Plot_tools.py
+  └─ Graph_tools.py
 
   Visual Studio Code: Color Theme: Light Modern
 """
@@ -26,7 +26,7 @@ import sys
 
 # SOL specific tools
 from SOL_Tools.AstroConstants import *  # all variales
-from SOL_Tools.Orbit_tools import *  # OrbitPropagation_2BN, OrbitPropagation_2BK, COE_to_SV
+from SOL_Tools.Orbit_tools import *  # OrbitPropagation_2BN, OrbitPropagation_2BK, COE_to_SV, ...
 from SOL_Tools.Graph_tools import *  # DrawEarth3D, DrawAngularMomentumVector
 from SOL_Tools.Math_tools import * 
 
@@ -55,6 +55,8 @@ if __name__ ==  "__main__":
     #Date_UTC = datetime.now(timezone.utc)
     # Reference epoch:
     Date_UTC = datetime(2026,9,3, 12,0,0)  # → GMST = 162.637288334314° at this date; At Noon, the Sun will be at Greenwich meridian
+    #Date_UTC = datetime(2026,6,21, 8,24,50)  # Spring Equinox when Sun is at it's highest declination
+    #Date_UTC = datetime(2026,9,23, 00,5,13) # Autumn Equinox when Sun is at 
     if False:
         Date_UTC -= timedelta(hours=24 * -71.2778252/360)  # → brings the Sun exactly in Quebec's meridian
         print(Date_UTC)
@@ -72,28 +74,29 @@ if __name__ ==  "__main__":
     t = Time.now()  # Astropy: Computes all key time components
     #print(t.mjd, t.jd, t.iso, t.tt, t.tai)
 
-    Sun_RA, Sun_Dec, Sun_Lon, Sun_dist_AU = sun_radec(Date_UTC)
-    #TODO: Bring this into SunEphemeris()
+    Sun_RA, Sun_Dec, Sun_dist_AU = Sun_Ephemerides(Date_UTC)
+    #Sun_RA=35
+    #Sun_Dec=25
     class Sun:
-        RA = Sun_RA    # [°] Sun's Right Ascension
+        RA = Sun_RA    # [°] Sun's Right Ascension (ECI)
         Dec = Sun_Dec  # [°] Sun's Declination -𝜖 < δ < +𝜖
-        Lon = Sun_RA - GMST  # [°] Sun's Longitude
+        Lon = Sun_RA - GMST  # [°] Sun's Longitude (ECEF)
         Dist_AU = Sun_dist_AU
         Dist_km = Sun_dist_AU * Earth.AU
         #RA = -71.3571   # [°] Sun's Right Ascension
         #Dec = 20  # [°] Sun's Declination -𝜖 < δ < +𝜖
-    print(f'Sun RA = {Sun.RA:.4f}, Dec = {Sun.Dec:.4f}, Lon = {Sun.Lon:.4f}°, Dist = {Sun.Dist_AU:.4f} AU = {Sun.Dist_km:.0f} km\n')
-    print(' GMST + Sun.Lon = ', GMST + Sun.Lon)  # ← lon ≡ RA - GMST
+    str = f'Sun RA = {Sun.RA:.4f}, Dec = {Sun.Dec:.4f}, Lon = {Sun.Lon:.4f}°, Dist = {Sun.Dist_AU:.4f} AU = {Sun.Dist_km:.0f} km'
+    print(str)
+    pl.add_text(str, position = "lower_left", font_size = 13, font='courier')
 
-
-    ViewMode = 'ECI'    # Earth-Centered, Intertial
+    
+    #ViewMode = 'ECI'    # Earth-Centered, Intertial
     ViewMode = 'ECEF'   # Earth-Centered, Earth-Fixed
 
     pl = DrawEarth3D(pl, ViewMode)
 
     # initial view, will be re-adjusted later
-    pl.camera.azimuth = -35  # [°]
-    pl.camera.elevation = 40   # [°]
+    view(pl, -35, 40)
     pl.camera.zoom(1.2)  # useful to zoom/unzoom
 
 
@@ -116,30 +119,34 @@ if __name__ ==  "__main__":
     Lat = phi_Greenwich # [°N]
     xyz_ = RotY(-Lat) @ xyz;  # ← requires a negative sign, as latitudes are measured clockwise, while the RotY rotation
                               #   operator is defined counter-clockwise
+    xyz_[2,:] *= Earth.sf                              
     # == Sph2Cart(0, Lat, Earth.r1_km)
     pl.add_points(np.column_stack(xyz_), color = 'red', point_size = 10, render_points_as_spheres=True, lighting=False)
 
     # (3) Draws arc line up to Greenwich
     phi = np.linspace(0, Lat, 100)
     arc = Sph2Cart(np.zeros_like(phi), phi, Earth.r1_km)
+    arc[2,:] *= Earth.sf
     if False:
         print('arc shape =', arc.shape) 
         print('arc[start]  =', arc[:,0])
         print('arc[end]=', arc[:,-1])
-    pl.add_mesh(pv.lines_from_points(arc.T), color = 'red', line_width = 4)  
+    Plot3D(pl, arc, color = 'red', line_width = 4)  
 
     # (4a) Draw Earth Parallel at Greenwich latitude
     theta = np.linspace(0.0, 360, 100)  # [°]
     C = EXPAND_FACTOR * Sph2Cart(theta, phi_Greenwich * np.ones_like(theta), Earth.r1_km)
-    pl.add_mesh(pv.lines_from_points(C.T), color = 'cyan', line_width = 2.0)
+    C[2,:] *= Earth.sf
+    Plot3D(pl, C, color = 'cyan', line_width = 2.0)
     # (4b) Using Small Circle
     lat, lon, xyz = SmallCircle(0, 90, 90 - phi_Greenwich)  # unitary SC
     xyz_ = EXPAND_FACTOR * Earth.r1_km * xyz  # scales to graph
+    xyz_[2,:] *= Earth.sf
     if False:
         print('φ = ', lat[0], lat[-1])
         print('λ = ', lon[0], lon[-1])
         print('ρ[0] = ', xyz_[:,1])
-    pl.add_mesh(pv.lines_from_points(xyz_.T), color = 'green', line_width = 1.5)
+    Plot3D(pl, xyz_, color = 'green', line_width = 1.5)
 
     # (5) Computes point location westward to longitude λ = 71.2°W (Quebec City longitude)
     Lon = -71.2778252  # [°W]
@@ -147,27 +154,34 @@ if __name__ ==  "__main__":
     xyz = Sph2Cart(0, 0, Earth.r1_km)
     xyz_ = RotZ(+Lon) @ xyz   # ← positive here, as longitude is computed
                               #   counter-clockwise, the same as RotZ operator
+    xyz_[2,:] *= Earth.sf
     pl.add_points(np.column_stack(xyz_), color = 'lime', point_size = 10, render_points_as_spheres=True, lighting=False)
 
     # (6) Draws arc from Equator
     phi = np.linspace(0, Lat, 100);
     arc = RotZ(+Lon) @ Sph2Cart(np.zeros_like(phi), phi, Earth.r1_km)
-    pl.add_mesh(pv.lines_from_points(arc.T), color = 'lime_green', line_width = 4)
+    arc[2,:] *= Earth.sf
+    Plot3D(pl, arc, color = 'lime_green', line_width = 4)  
     # (7) Draws last point of arc
     pl.add_points(arc[:,-1], color = 'lime', point_size = 10, render_points_as_spheres=True, lighting=False)
 
     #--- Draws Sun vector pointing to Earth Center and add lighting in this direction
-    if ViewMode ==  'ECEF': 
 
-        # (8) Draw Sun vector pointing to Earth center, knowing Sun longitude λ_⊙ and Sun declination δ_⊙
-        DrawSunVector(pl, Sun)
+    # (8) Draw Sun vector pointing to Earth center, knowing Sun longitude λ_⊙ and Sun declination δ_⊙
+    DrawSunVector(pl, Sun, ViewMode)
 
-        str = f"Sun RA = {Sun.RA:.4f}°, Dec = {Sun.Dec:.4f}°, Lon = {Sun.Lon:.4f}°"
-        pl.add_text(str, position = "lower_left", font_size = 8, font='courier')
+    # (9) Draws Ecliptic line knowing Earth obliquity 𝜖 and GMST angle at epoch
+    DrawEclipticLine(pl, GMST, Earth)
 
-        # (9) Draws Ecliptic line knowing Earth obliquity 𝜖 and GMST angle at epoch
-        DrawEclipticLine(pl, GMST, Earth)
+    #--- Draws SEZ plane at observer's position
+    class Observer:
+        Lon = -71
+        Lat_geod = 41
 
+    #SEZ = DrawSEZPlane(Observer, 1000);
+
+
+    view(pl, Sun.Lon - 90, 0)
 
     #--- Draws the Great Circle arc between Miami & Greenwich
     city1 = 'Miami, USA'
@@ -180,7 +194,8 @@ if __name__ ==  "__main__":
 
     GC = GreatCircle2(lat1, lon1, lat2, lon2)
     GC_path = EXPAND_FACTOR * Earth.r1_km * GC.xyz
-    pl.add_mesh(pv.lines_from_points(GC_path.T), color = 'blue', line_width = 2)  
+    GC_path[2,:] *= Earth.sf
+    Plot3D(pl, GC_path, color = 'blue', line_width = 2)  
 
     # -------------------------------------------------------------------------------
     # -------------------------------- Homework -------------------------------------
@@ -221,10 +236,6 @@ if __name__ ==  "__main__":
             color='lightgray',
             opacity=0.25,
             show_edges=True)
-
-
-
-
 
     print('Done.')  # appears when all computations done
 

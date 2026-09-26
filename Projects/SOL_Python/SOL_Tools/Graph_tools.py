@@ -16,6 +16,7 @@ import vtkmodules.vtkRenderingFreeType
 
 from SOL_Tools.AstroConstants import EXPAND_FACTOR, Earth
 from SOL_Tools.Math_tools import *  
+from SOL_Tools.Orbit_tools import geod_to_pos
 
 
 def DrawEarth3D(pl, view_mode):
@@ -27,14 +28,13 @@ def DrawEarth3D(pl, view_mode):
     #--- Arrow locations and directions
 
     directions = np.eye(3)
-
     for d in directions:
+        # print('d = ', d)
         axis = pv.Arrow(start = (0, 0, 0), direction = d,
                         tip_length = 0.25/5, tip_radius = 0.08/7, shaft_radius = 0.025/7,
                         tip_resolution = 32, shaft_resolution = 32,       # (could use 16)
                         scale = 1.5 * RE)
         pl.add_mesh(axis, color = 'gray', smooth_shading = True, lighting = False)
-    
 
     #--- Create the Earth sphere
     if False:
@@ -76,6 +76,9 @@ def DrawEarth3D(pl, view_mode):
         # TODO: option downsampling for faster plotting 
     else:
         Earth_sphere = examples.planets.load_earth(radius = Earth.r1_km, lat_resolution = 180, lon_resolution = 360)
+        # Adjusts the Earth's oblateness
+        Earth_sphere.scale((1.0, 1.0, Earth.sf), inplace=True)
+
         # Rotates map to have Greenwich located at Prime Meridian (PRIME_MERIDIAN_OFFSET_DEG = 180)
         Earth_sphere.rotate_z(180, point = (0, 0, 0), inplace = True)
 
@@ -109,8 +112,8 @@ def DrawEarth3D(pl, view_mode):
         pv.Plotter(lighting = "none")  # will use the Sun specific angle lighting 
         AMBIENT = 0.4    # 0 = pitch-black night side, 0.5 = washed out
         DIFFUSE = 0.95   # 0.95–1 strength of the Sun-lit hemisphere
-        SPECULAR = 0.0  # keep low; oceans otherwise get a plastic sheen
-        OPACITY = 1
+        SPECULAR = 0.0   # keep low; oceans otherwise get a plastic sheen
+        OPACITY = 0.5    # use < 1 to make the surface transparent
 
     if False:  # Writes info 
         str = f"Ambient = {AMBIENT}, Diffuse = {DIFFUSE}, Specular = {SPECULAR}"
@@ -163,19 +166,15 @@ def DrawEarth3D(pl, view_mode):
     x = r * cosd(theta)
     y = r * sind(theta)
     z = np.zeros_like(theta)  # z ≡ 0° on Equator
-    lines = pv.lines_from_points(np.column_stack((x, y, z)), close = True)
-    pl.add_mesh(lines, color = "navy", line_width = 1)
+    lines = np.column_stack((x, y, z))
+    Plot3D(pl, lines, color = 'navy', line_width = 1)
 
     #--- Draws Tropics
     for phi in Earth.Obliquity * np.array((-1,1)):
         #print('phi = ', phi)
-        r_ = r * cosd(phi)
-        x = r_ * cosd(theta)
-        y = r_ * sind(theta)
-        z = r * sind(phi) + np.zeros_like(theta)  # z ≡ ±𝜖° on Tropics of Cancer and Capricorn
-        #lines = pv.lines_from_points(np.column_stack((x, y, z)), close = True)
-        #pl.add_mesh(lines, color = "Khaki", line_width = 0.5)  
-        add_3d_dashed_line(pl, x, y, z, dash_length = 2, gap_length = 1, color = 'Khaki', line_width = 1.5)
+        pos = Sph2Cart(theta, phi * np.ones_like(theta), r)
+        pos[2,:] *= Earth.sf
+        Plot_dash_3D(pl, pos, dash_length = 2, gap_length = 1, color = 'Khaki', line_width = 1.5)
 
     #TODO: Draw Arctic & Antarctic Circles
 
@@ -186,8 +185,9 @@ def DrawEarth3D(pl, view_mode):
         x = r * cosd(phi)
         y = np.zeros_like(phi)  # y ≡ 0° on Prime Meridian
         z = r * sind(phi)
-        lines = pv.lines_from_points(np.column_stack((x, y, z)), close = False)
-        pl.add_mesh(lines, color = "navy", line_width = 1)  #render_lines_as_tubes = True
+        z *= Earth.sf
+        lines = np.column_stack((x, y, z))
+        Plot3D(pl, lines, color = "navy", line_width = 1)  #render_lines_as_tubes = True
 
     #--- Identifies the Equatorial Plane
     txt = pv.Text3D('Equatorial\nplane', depth = 0, normal = (0,0,1))
@@ -251,8 +251,8 @@ def DrawEarth3D(pl, view_mode):
 def DrawAngularMomentumVector(pl, H_):
 
     if False:  # (simple line)
-        line = pv.lines_from_points(np.column_stack(([0, H_[0]], [0, H_[1]], [0, H_[2]])))
-        pl.add_mesh(line, color = 'navy', line_width = 2.5)
+        line = np.column_stack(([0, H_[0]], [0, H_[1]], [0, H_[2]]))
+        Plot3D(pl, line, color = 'navy', line_width = 2.5)
     else:  # Nicer arrow
         arrow_geom = pv.Arrow(
             start = (0.0, 0.0, 0.0),
@@ -283,7 +283,7 @@ def DrawAngularMomentumVector(pl, H_):
 # end DrawAngularMomentumVector()    
 
 
-def DrawSunVector(pl, Sun):
+def DrawSunVector(pl, Sun, view_mode):
     """
     Earth lit by the Sun at a given right ascension and declination.
 
@@ -296,27 +296,51 @@ def DrawSunVector(pl, Sun):
     washing out the day side or moving the terminator.
     """
 
-    SUN_DISTANCE = 1.0e9  # [km] Only the direction matters for a directional light, but a large value keeps the geometry unambiguous.
-
-    Sun_Earth_ECI = Sph2Cart(Sun.Lon, Sun.Dec, Earth.r1_km, True).ravel()  # point on Earth Surface
-    s_norm = Sun_Earth_ECI / norm(Sun_Earth_ECI)  # sun_hat
-
-    if False:
-        line = pv.lines_from_points(np.column_stack(    Earth.r1_km * np.outer(s_norm, [1, 2])     ))
-        pl.add_mesh(line, color = 'orange', line_width = 2.5)
+    if view_mode == 'ECI':
+        lon = Sun.RA
     else:
-        arrow_geom = pv.Arrow(
-            start = 2 * Earth.r1_km * s_norm,  # starts at Earth's surface
-            direction = -s_norm,
-            tip_length = 0.1,
-            tip_radius = 0.02,     # ← controls tip width
-            shaft_radius = 0.005,  # ← controls shaft width
-            tip_resolution = 32,     # (could use 16)
-            shaft_resolution = 32,
-            scale = Earth.r1_km)   # to Earth's surface
-        # Make the arrow mostly self-lit, since it's an annotation rather than a physical object in the scene
-        pl.add_mesh(arrow_geom, color = 'cadmium_lemon', ambient = 0.8, diffuse = 0.2, specular = 0.0, smooth_shading = True) 
+        lon = Sun.Lon
 
+    # Sun-Earth vector
+    # see SOL Part I – 𝜌  Radius of the orbit and 𝑅_𝜙
+
+    #Sun_vector = Sph2Cart(lon, Sun.Dec, Sun.Dist_km)  # Sun is on the Celestial Sphere with position expressed in RA/Lon & Dec
+
+    #--- Computes point touching Earth
+    h_geod = 0  # for touching the Earth surface
+    R_geod, phi_geoc, R_e, R_N, R_M, x0,z0 = geod_to_pos(Sun.Dec, lon, h_geod, Earth.r1_km, Earth.r2_km)
+
+    Sun_vect_geod = R_geod - np.stack([0,0,z0])
+    s_norm = Sun_vect_geod.ravel() / norm(Sun_vect_geod)  # normalized vector (sun_hat) {1×3}
+
+    Sun_vec_length = Earth.r1_km
+
+    arrow_geom = pv.Arrow(
+        start = R_geod + Sun_vec_length * s_norm,      # starts above Earth's surface (R_N) and extends 
+        direction = -s_norm,
+        tip_length = 0.1,
+        tip_radius = 0.02,     # ← controls tip width
+        shaft_radius = 0.005,  # ← controls shaft width
+        tip_resolution = 32,     # (could use 16)
+        shaft_resolution = 32,
+        scale = Sun_vec_length)   # length
+    # Make the arrow mostly self-lit, since it's an annotation rather than a physical object in the scene
+    pl.add_mesh(arrow_geom, color = 'cadmium_lemon', ambient = 0.8, diffuse = 0.2, specular = 0.0, smooth_shading = True) 
+
+    # Draws the complement line going to the Earth’s center
+    #vec = np.outer(R_geod * s_norm, [0, 1])  # [3×2]
+    vec = np.vstack((np.array([0,0,z0]), R_geod))
+    Plot3D(pl, vec, color = 'orange', line_width = 2.0)
+
+    # draws the z-axis complement 
+    vec = np.vstack((np.array([[0,0,-Earth.r2_km], [0,0,0]])))
+    Plot3D(pl, vec, color = 'gray', line_width = 2)
+    # draws the z₀ geodetic offset 
+    vec = np.vstack((np.array([[0,0,z0], [0,0,0]])))
+    Plot3D(pl, vec, color = 'red', line_width = 4)
+
+    # TODO: computes the angle between the Earth axis of rotation and the Sun ray vector; → should be equal to Sun.Dec == 90° at equinox.
+    
     if False:
         # Adds a light to reflect Sun's astrometric position
         pl.remove_all_lights()  # Kills the default 
@@ -338,11 +362,35 @@ def DrawSunVector(pl, Sun):
             text_color = 'orange',
             shape = None)
 
-    #--- Draws Terminator Line
-    theta = np.linspace(0.0, 360, 100)  # [°]
-    C = EXPAND_FACTOR * Sph2Cart(theta, np.zeros_like(theta), Earth.r1_km)
-    C = RotZ(Sun.Lon) @ RotY(90 - Sun.Dec) @ C
-    pl.add_mesh(pv.lines_from_points(C.T), color = 'dim_gray', line_width = 2.0)
+    #--- Draws Terminator Line (line of sunset/sunrise)
+    if view_mode == 'ECEF':  # N/A in ECI
+
+        # 1a) rotated circle
+        theta = np.linspace(0.0, 360, 400)  # [°]
+        C = EXPAND_FACTOR * Sph2Cart(theta, np.zeros_like(theta), Earth.r1_km)
+        theta = 90 - Sun.Dec
+        C = RotZ(Sun.Lon) @ RotY(theta) @ C
+        Plot_dash_3D(pl, C, dash_length = 4, gap_length = 1, color = 'indigo', line_width = 2)
+
+        # 1b) squeezing circle doesn't work for arbitrary orientation
+        C[2,:] *= Earth.sf
+        Plot_dash_3D(pl, C, dash_length = 4, gap_length = 1, color = 'red', line_width = 2)
+
+        # 2) GreatCircle
+        lat_GC, lon_GC, xyz_GC = GreatCircle(lon, Sun.Dec)
+        xyz_GC *= Earth.r1_km
+        Plot3D(pl, xyz_GC, color="orange", line_width=3)  
+
+        # 3) Rotated "Great Ellipse" (Great Circle on an Ellipsoid)
+        obl_geod = Earth.Obliquity  # geodetic property or the Earth axis of rotation wrt to ecliptic plane around the Sun
+        obl_geoc_ = atand(tand(obl_geod) * (Earth.r2_km/Earth.r1_km)**2)  # φ′ [°]
+        print('obl_geod = ', obl_geod)
+        print('obl_geoc_ = ', obl_geoc_)
+
+        lat_GE, lon_GE, xyz_GE, lat_geoc = GreatEllipsoid(lon, Sun.Dec, Earth.r1_km, Earth.r2_km) 
+        Plot3D(pl, xyz_GE, color="black", line_width=3)  
+
+    #return Sun_vector
         
 # end DrawSunVector()
 
@@ -350,49 +398,44 @@ def DrawSunVector(pl, Sun):
 def DrawEclipticLine(pl, GMST, Earth):
 # Draws 3D Ecliptic plane line of Earth's surface
 
-    # Creates a ring 
-    theta = np.linspace(0.0, 360, 101)
-    # Note: Matlab linspace(0, 360, 101) is inclusive at both ends, so the first and last points coincide — 101 points describing 100 segments. 
-    # That's what you want for a closed ring you'll draw as a polyline, and it matches MATLAB exactly. 
-    # If you ever want 101 distinct points instead, use np.linspace(0, 360, 101)[:-1] or np.arange(0, 360, 3.6).
-    ring = np.array([cosd(theta), sind(theta), np.zeros_like(theta)])  # along the equator Z = 0°
+    Obliquity = Earth.Obliquity  # = 23.4358° (2026)
+    obl_geoc_ = atand(tand(Obliquity) * (Earth.r2_km/Earth.r1_km)**2);  # φ′
+    # print('Obliquity ε = %.4f°', Obliquity)
+    # print('φ′ = %.4f°', obl_geoc_)       
 
-    # Rotates the ring about X axis
-    Obliquity = Earth.Obliquity  # = 23.436° (2024)
-    S = RotX(Obliquity) @ ring  # positive, as inclination  [3x101]
+    # Draws the Obliquity vector
+    V = 1.2 * Earth.r1_km * RotZ(-GMST) @ RotX(Obliquity) @ np.array([[0,0,-1], [0,0,+1]]).T  # 3×2
+    Plot3D(pl, V.T, color = 'blue', line_width = 1.5)
+    #Plot_dash_3D(pl, C, dash_length = 4, gap_length = 1, color = 'blue', line_width = 2)
 
-    # Rotates disk about Z axis: over the primary direction or the First Point of Aries (♈︎)
-    S = RotZ(-GMST) @ S  # ← negative here, because from ECI to ECEF
+    lat, lon, S, lat_geoc = GreatEllipsoid(90 - GMST, obl_geoc_ - 90, Earth.r1_km, Earth.r2_km) 
 
-    # ECEF because GMST if from I to X, and ECI is the frame of reference of the current graph
-
-    S_ = EXPAND_FACTOR * Earth.r1_km * S  # scales for graphic
-    if True:
-        # PyVista needs the transpose (.T), since it expects n×3:
-        pl.add_mesh(pv.lines_from_points(S_.T), color = 'cadmium_lemon', line_width = 2)
+    if False:
+        Plot3D(pl, S, color = 'cadmium_lemon', line_width = 2)
     else:
-        x = S[0,:]
-        y = S[1,:]
-        z = S[2,:]
-        add_3d_dashed_line(pl, x, y, z, dash_length = 2, gap_length = 1, color = 'cadmium_lemon', line_width = 1)
+        Plot_dash_3D(pl, S, dash_length = 3, gap_length = 1, color = 'cadmium_lemon', line_width = 3)
 
+"""
+==> Not really applicable to the ecliptic line, which is tied to the Earth
     # → Draws the vector normal to the ecliptic, i.e. the vector perpendicular to the Sun's ecliptic path on the Earth surface
-    E = np.cross(S[:,1], S[:,2])  # 1×3 vector
+    E = np.cross(S[:,0], S[:,1])  # 1×3 vector
     N = np.column_stack((np.zeros(3), E.T))  # Creates the vector with origin at Earth's center
     N_ = 1.5 * Earth.r1_km * N / norm(N)  # scales for display
-    pl.add_mesh(pv.lines_from_points(N_.T), color = 'cadmium_lemon', line_width = 2)
-   
+    N_[2,:] *= Earth.sf
+    Plot3D(pl, N_, color = 'cadmium_lemon', line_width = 2)
+
     # Note: will be similar to the Angular Momentum vector Ĥ, while this one can be computed directly by Ĥ = R̂ × V̂
 
     # → Computes the angle between the Sun vector and this angle
-    if False:
-        gamma = np.rad2deg(np.arccos(np.dot(E, S[:,1]) / (np.linalg.norm(E) * np.linalg.norm(S[:,1]))));
-    else:
-        gamma = Angle(E, S[:,1])
+    V_ = V[:,1] - V[:,0]
 
+    gamma = Angle(V_, S[:,0])  # ≡ acosd(np.dot(V_, S[:,0]) / (norm(V_) * norm(S[:,0])))
     print(f'  γ = {gamma:.4f}°')  # ≡ 90° by construction
+    # → only true from first point at λ(0), otherwise must take into account 
+"""
 
 # end of DrawEclipticLine
+
 
 
 #TODO: Identifies Perigee & Apogee points on the orbit
@@ -400,14 +443,45 @@ def DrawEclipticLine(pl, GMST, Earth):
 #TODO: Draws the line of apses with Ascending / Descending node symbols ☊ ☋
 #TODO: Calculate & draw β☉ angle
 
-def add_3d_dashed_line(plotter, x, y, z, dash_length = 5, gap_length = 3, **kwargs):
+
+def Plot3D(pl, xyz, **kwargs):
+    """
+    Plots a 3D line from an array of points using PyVista.
+    
+    Parameters:
+    - xyz (array_like): An (N, 3) array of points defining the line.
+    - plotter (pv.Plotter): The active PyVista plotter instance to add the mesh to.
+    - **kwargs: Additional arguments passed directly to plotter.add_mesh.
+    """
+
+    m, n = xyz.shape
+    if n != 3 and m == 3:
+        xyz = xyz.T  # PyVista needs the transpose (.T), since it expects n×3:
+    elif n != 3:
+        raise TypeError('>>> Plot3D: argument must be a 3×N or N×3 array')
+    
+    # Create the PyVista polydata line mesh from the points
+    mesh = pv.lines_from_points(xyz)  #TODO: find a way to pass the info closed or not
+    
+    # Add the mesh to the provided plotter instance
+    pl.add_mesh(mesh, **kwargs)
+
+# end Plot3D
+
+
+def Plot_dash_3D(pl, points, dash_length = 3, gap_length = 1, **kwargs):
     """Generates a geometrically dashed 3D line segment array inside PyVista."""
     # PyVista does not have a native line style property for 3D geometry, but you can draw dashed lines by manually building a mesh of alternating short line segments
     # Because PyVista is built on VTK (which natively handles geometric elements rather than pixel-based line styling), PyVista does not support native 3D dashed line styles.
 
-    points = np.column_stack((x, y, z))
-    num_points = len(points)
+    m, n = points.shape
+    if n != 3 and m == 3:
+        points = points.T  # PyVista needs the transpose (.T), since it expects n×3:
+    elif n != 3:
+        raise TypeError('>>> Plot3D: argument must be a 3×N or N×3 array')
     
+    num_points = len(points)
+
     # Track position sequence
     i = 0
     while i < num_points - 1:
@@ -420,7 +494,15 @@ def add_3d_dashed_line(plotter, x, y, z, dash_length = 5, gap_length = 3, **kwar
             # Format lines array as required by PyVista PolyData: [num_pts, pt0, pt1, ...]
             lines = np.hstack(([len(dash_points)], np.arange(len(dash_points))))
             dash_mesh = pv.PolyData(dash_points, lines = lines)
-            plotter.add_mesh(dash_mesh, **kwargs)
+            pl.add_mesh(dash_mesh, **kwargs)
             
         # Jump ahead past the dash and the invisible gap space
         i +=  dash_length + gap_length
+
+# end Plot_dash_3D
+
+
+def view(pl, az, el):
+    pl.camera.azimuth = az  # [°]
+    pl.camera.elevation = el   # [°]
+# end view()

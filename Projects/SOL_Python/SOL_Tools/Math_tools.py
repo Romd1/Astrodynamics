@@ -5,6 +5,7 @@
 
 import numpy as np
 from geopy.distance import great_circle
+from SOL_Tools.AstroConstants import Earth
 #import math
 
 def DEG(a):
@@ -27,10 +28,11 @@ def asind(x):
     return np.rad2deg(np.arcsin(x))
 def acosd(x):
     return np.rad2deg(np.arccos(x))
+def atand(x):
+    return np.rad2deg(np.arctan(x))
 def atan2d(y, x):
     return np.rad2deg(np.arctan2(y, x))
-def atand(x):
-    return np.degrees(np.arctan(x))
+
 
 def norm(v):
 # Computes the norm of a vector
@@ -82,7 +84,7 @@ def RotZ(angle):
     ])
 
 
-def Sph2Cart(az, el, r = 1.0, stack = True):
+def Sph2Cart(az, el, r = 1.0):
     """Transform spherical to Cartesian coordinates, angles in degrees.
 
     Parameters
@@ -123,10 +125,10 @@ def Sph2Cart(az, el, r = 1.0, stack = True):
     y = rcoselev * sind(az)
     z = r * sind(el)
 
-    if stack:
-        return np.vstack((x, y, z))
-    else:
-        return x, y, z
+    return np.vstack((x, y, z))  # 3×n array
+    # vs return x, y, z  (3-element list)
+
+# end of Sph2Cart()
 
 
 def Cart2Sph(xyz):
@@ -156,10 +158,59 @@ def Cart2Sph(xyz):
 
     r = np.linalg.norm(xyz, axis=0)
 
-    lon = np.degrees(np.arctan2(y, x)) % 360.0
-    lat = np.degrees(np.arcsin(z / r))
+    lon = atan2d(y, x) % 360.0
+    lat = asind(z / r)
 
     return lon, lat, r
+
+# end of Cart2Sph()
+
+
+def GreatCircle(az, el, t=None):
+    """
+    Generate coordinates of a great circle on a unit sphere.
+
+    Parameters
+    ----------
+    az : float
+        Equatorial azimuth / right ascension of the great-circle pole [deg].
+
+    el : float
+        Equatorial elevation / declination of the great-circle pole [deg].
+
+    t : array_like, optional
+        Angles along the great circle [deg].
+        Default is 100 points from 0 to 360 deg.
+
+    Returns
+    -------
+    lat : ndarray
+        Latitude of points along the great circle [deg].
+
+    lon : ndarray
+        Longitude of points along the great circle [deg].
+
+    xyz : ndarray, shape (3, N)
+        Cartesian coordinates of the great circle on the unit sphere.
+    """
+
+    if t is None:
+        t = np.linspace(0.0, 360.0, 100)
+
+    t = np.asarray(t, dtype=float)
+
+    # Great-circle Cartesian coordinates
+    xyz = np.vstack((
+        -sind(el) * cosd(az) * sind(t) - sind(az) * cosd(t),
+        -sind(el) * sind(az) * sind(t) + cosd(az) * cosd(t),
+         cosd(el) * sind(t)
+    ))
+
+    lon, lat, r = Cart2Sph(xyz)
+
+    return lat, lon, xyz
+
+# end of GreatCircle()
 
 
 def GreatCircle2(lat1, lon1, lat2, lon2, t=None):
@@ -211,11 +262,16 @@ def GreatCircle2(lat1, lon1, lat2, lon2, t=None):
         t = np.asarray(t, dtype=float)
 
     # Endpoint unit vectors
-    print('lon1, lat1 = ', lon1, lat1)
-    x1, y1, z1 = Sph2Cart(lon1, lat1, 1.0, False)
-    print('xyz1 = ', x1, y1, z1)
-    x2, y2, z2 = Sph2Cart(lon2, lat2, 1.0, False)
-
+    #print('lon1, lat1 = ', lon1, lat1)
+    pos1 = Sph2Cart(lon1, lat1, 1.0)  
+    x1=pos1[0]
+    y1=pos1[1]
+    z1=pos1[2]
+    #print('xyz1 = ', x1, y1, z1)
+    pos2 = Sph2Cart(lon2, lat2, 1.0)
+    x2=pos2[0]
+    y2=pos2[1]
+    z2=pos2[2]
     denom = sind(GC_arclen)
 
     if np.isclose(denom, 0.0):
@@ -234,7 +290,7 @@ def GreatCircle2(lat1, lon1, lat2, lon2, t=None):
         c1 * z1 + c2 * z2,
     ))
 
-    GC_lon, GC_lat, _ = Cart2Sph(GC_xyz)
+    GC_lon, GC_lat, r = Cart2Sph(GC_xyz)
 
     # Great-circle navigation quantities
     lon12 = lon2 - lon1
@@ -268,7 +324,7 @@ def GreatCircle2(lat1, lon1, lat2, lon2, t=None):
       
     return GC
         
-# end GreatCircle()
+# end GreatCircle2()
 
 
 def SmallCircle(az, el, alpha, t=None):
@@ -315,7 +371,7 @@ def SmallCircle(az, el, alpha, t=None):
 
     xyz = np.vstack((x, y, z))
 
-    lon, lat, _ = Cart2Sph(xyz)
+    lon, lat, r = Cart2Sph(xyz)
 
     return lat, lon, xyz
 
@@ -336,3 +392,123 @@ def Angle(R1, R2):
     return DEG(alpha)
 
 # end of Angle()
+
+
+import numpy as np
+
+
+def GreatEllipsoid(az, el, a = Earth.r1_km, b = Earth.r2_km, t=None):
+    """
+    Generate a great ellipse on an oblate ellipsoid.
+
+    Parameters
+    ----------
+    az : float
+        Azimuth / right ascension of the plane pole [deg].
+
+    el : float
+        Elevation / declination of the plane pole [deg].
+
+    a : float
+        Equatorial semi-major radius.
+
+    b : float
+        Polar semi-minor radius.
+
+    t : array_like, optional
+        Parametric angle around the ellipse [deg].
+        Default: 0...360 deg with 361 points.
+
+    Returns
+    -------
+    lat : ndarray
+        Geodetic latitude of points on the ellipsoid [deg].
+
+    lon : ndarray
+        Longitude [deg], wrapped to [-180, 180).
+
+    xyz : ndarray, shape (3, N)
+        Cartesian coordinates [x, y, z].
+
+    lat_geoc : ndarray
+        Geocentric latitude [deg].
+
+    Notes
+    -----
+    The ellipsoid is
+
+        x^2/a^2 + y^2/a^2 + z^2/b^2 = 1
+
+    and the central plane satisfies
+
+        n_pole . r = 0
+
+    where the pole is specified by (az, el).
+    """
+
+    if t is None:
+        t = np.linspace(0.0, 360.0, 361)
+
+    t = np.asarray(t, dtype=float).ravel()
+
+    if a <= 0 or b <= 0:
+        raise ValueError("a and b must be positive.")
+
+    #--- Pole of the great-ellipse plane in physical Cartesian space
+    n = Sph2Cart(az, el).flatten()
+ 
+    # ------------------------------------------------------------
+    # Transform ellipsoid to unit sphere:
+    #
+    #     x = a*u
+    #     y = a*v
+    #     z = b*w
+    #
+    # Plane condition n.r = 0 becomes q.u = 0, where
+    #
+    #     q = diag(a,a,b) @ n
+    # ------------------------------------------------------------
+    q = np.array([a, a, b]) * n  # list ; same as tuple np.array((a, a, b))
+    
+    # Construct two orthonormal vectors spanning q.u = 0
+    #
+    # e1 chosen to reproduce the spherical GreatCircle
+    # orientation when a == b.
+    e1 = np.array([-sind(az), cosd(az), 0.0])
+    e1 /= np.linalg.norm(e1)
+    e2 = np.cross(q, e1)
+    e2 /= np.linalg.norm(e2)
+
+    #--- Great circle on transformed unit sphere
+    u = (e1[:, None] * cosd(t) + e2[:, None] * sind(t))
+
+    #--- Transform back to physical ellipsoid
+    x = a * u[0, :]
+    y = a * u[1, :]
+    z = b * u[2, :]
+
+    xyz = np.vstack((x, y, z))
+
+    #--- Longitude
+    lon = atan2d(y, x)
+    # Wrap to [-180, 180)
+    lon = (lon + 180.0) % 360.0 - 180.0
+
+    #--- Geocentric latitude
+    rho = np.hypot(x, y)
+    lat_geoc = atan2d(z, rho)
+
+    # Geodetic latitude
+    #
+    # Surface normal:
+    #     n_surf ~ [x/a^2, y/a^2, z/b^2]
+    #
+    # therefore
+    #     tan(phi_geod) = (a^2/b^2) * z/rho
+    # ------------------------------------------------------------
+
+    lat = atan2d(a**2 * z, b**2 * rho)
+
+    return lat, lon, xyz, lat_geoc
+
+# end of GreatEllipsoid()

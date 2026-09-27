@@ -512,3 +512,138 @@ def GreatEllipsoid(az, el, a = Earth.r1_km, b = Earth.r2_km, t=None):
     return lat, lon, xyz, lat_geoc
 
 # end of GreatEllipsoid()
+
+
+def eccentricity_squared(a, b):
+    """
+    Compute the first eccentricity squared of an ellipsoid.
+
+    Parameters
+    ----------
+    a : float
+        Semi-major (equatorial) radius of the ellipsoid [km].
+    b : float
+        Semi-minor (polar) radius of the ellipsoid [km].
+
+    Returns
+    -------
+    e2 : float
+        First eccentricity squared, e^2 = 1 - (b/a)^2.
+    """
+    return 1.0 - (b / a) ** 2
+
+
+def ellipsoid_radii(phi_geod, a=Earth.r1_km, b=Earth.r2_km):
+    """
+    Compute the radii of curvature and auxiliary ellipsoidal quantities
+    at a given geodetic latitude.
+
+    This function factors out the geometric quantities that used to be
+    returned by `geod_to_pos`, so they remain available on their own
+    (e.g. for computing geodetic <-> geocentric transformations,
+    curvature-dependent corrections, etc.), while also being reused
+    internally by `geod_to_pos`.
+
+    Parameters
+    ----------
+    phi_geod : float or array_like
+        Geodetic latitude [deg].
+    a : float, optional
+        Semi-major (equatorial) radius of the ellipsoid [km].
+        Default = 6378.137 km (WGS84).
+    b : float, optional
+        Semi-minor (polar) radius of the ellipsoid [km].
+        Default = 6356.75231424518 km (WGS84).
+
+    Returns
+    -------
+    R_N : float or ndarray
+        Prime vertical radius of curvature [km].
+    R_M : float or ndarray
+        Meridian radius of curvature [km].
+    R_e : float or ndarray
+        Distance from the ellipsoid center to its surface, measured
+        along the geocentric radial direction [km].
+    x0 : float or ndarray
+        Auxiliary x-coordinate from the ellipsoid geometry [km].
+    z0 : float or ndarray
+        Auxiliary z-coordinate from the ellipsoid geometry [km].
+
+    Notes
+    -----
+    Based on the same equations as the MATLAB geod_to_pos function.
+    Angles are supplied in degrees.
+    """
+    phi_geod = np.asarray(phi_geod, dtype=float)
+
+    e2 = eccentricity_squared(a, b)
+
+    sin_phi = sind(phi_geod)
+    cos_phi = cosd(phi_geod)
+
+    # Prime vertical radius of curvature
+    # R_N = a / sqrt(1 - e^2 sin^2(phi))
+    R_N = a / np.sqrt(1.0 - e2 * sin_phi**2)
+
+    # Meridian radius of curvature
+    R_M = a * (1.0 - e2) / (1.0 - e2 * sin_phi**2) ** 1.5
+
+    # Radius from ellipsoid center to the ellipsoid surface, along the
+    # corresponding geocentric radial direction
+    R_e = a * np.sqrt(
+        ((1.0 - e2) ** 2 * sin_phi**2 + cos_phi**2) / (1.0 - e2 * sin_phi**2)
+    )
+
+    # Auxiliary ellipsoidal quantities
+    r_delta = R_N * cos_phi
+    r_K_ = R_N * sin_phi
+    z_sub = (b / a) ** 2 * R_N * sin_phi
+
+    x0 = e2 * r_delta
+    z0 = z_sub - r_K_
+
+    return R_N, R_M, R_e, x0, z0
+
+
+def line_circle_intersection(m, b, rho):
+    """
+    Intersect the line y = m*x + b with a circle of radius rho centered at the origin.
+ 
+    Parameters
+    ----------
+    m : float or array_like
+        Slope of the line.
+    b : float or array_like
+        Y-intercept of the line.
+    rho : float or array_like
+        Radius of the circle, centered at the origin.
+ 
+    Returns
+    -------
+    x : ndarray
+        X coordinate of the intersection point.
+    y : ndarray
+        Y coordinate of the intersection point.
+ 
+    Notes
+    -----
+    Returns the "+" branch of the quadratic solution to
+    m*x + b == sqrt(rho^2 - x^2):
+ 
+        x = (-b*m + sqrt(rho^2 * (m^2 + 1) - b^2)) / (m^2 + 1)
+        y = m*x + b
+ 
+    This is the same root used by `geod_to_geoc` to pick the physically
+    relevant intersection point. No real solution exists if
+    rho^2 * (m^2 + 1) < b^2 (the line does not reach the circle); this is
+    not checked here and will produce NaNs via `np.sqrt` of a negative
+    number, consistent with the original unguarded MATLAB expression.
+    """
+    m = np.asarray(m, dtype=float)
+    b = np.asarray(b, dtype=float)
+    rho = np.asarray(rho, dtype=float)
+ 
+    x = (-b * m + np.sqrt(rho**2 * (m**2 + 1) - b**2)) / (m**2 + 1)
+    y = m * x + b
+ 
+    return x, y

@@ -2,9 +2,6 @@ import numpy as np
 from SOL_Tools.Math_tools import * 
 from SOL_Tools.Orbit_tools import * 
 
-from geod_to_pos import geod_to_pos
-from geoc_to_geod import geoc_to_geod
-
 class Observer:
     """
     Represents the observer of the target.
@@ -43,11 +40,11 @@ class Observer:
         self.h = h                # [km]
 
         R_geoc = geod_to_pos(self.Lat_geod, self.Lon, self.h)
-
+        Values_geod = ellipsoid_radii(self.Lat_geod)
         self.pos = np.asarray(R_geoc[0], dtype=float).reshape(3) # ECEF position [km]
         self.Lat_geoc = R_geoc[1]            # Geocentric latitude [deg]
-        self.R_e = R_geoc[2]                 # Geocentric radius [km]
-        self.z0 = R_geoc[6]                  # Auxiliary z-coordinate [km]
+        self.R_e = Values_geod[2]                 # Geocentric radius [km]
+        self.z0 = Values_geod[4]                  # Auxiliary z-coordinate [km]
 
         self.normal_vector = RotZ(self.Lon) @ RotY(-self.Lat_geod) @ np.array([1, 0, 0]) # Unit normal vector, RHR for rot
 
@@ -93,7 +90,7 @@ class Target:
         self.pos = np.asarray(R_ECEF, dtype=float).reshape(3)
 
         # ECEF -> Geocentric and geodetic
-        self.Lat_geod, self.h_geod, self.Lon, self.Lat_geoc, self.Rho = geoc_to_geod(R_ECEF)
+        self.Lat_geod, self.h_geod, self.Lon, self.Lat_geoc, self.Rho = pos_to_geod(R_ECEF)
 
     def subsatellite_point(self):
         """

@@ -308,7 +308,8 @@ def DrawSunVector(pl, Sun, view_mode):
 
     #--- Computes point touching Earth
     h_geod = 0  # for touching the Earth surface
-    R_geod, phi_geoc, R_e, R_N, R_M, x0,z0 = geod_to_pos(Sun.Dec, lon, h_geod, Earth.r1_km, Earth.r2_km)
+    R_geod, phi_geoc = geod_to_pos(Sun.Dec, lon, h_geod, Earth.r1_km, Earth.r2_km)
+    R_N, R_M, R_e, x0,z0 = ellipsoid_radii(Sun.Dec, Earth.r1_km, Earth.r2_km)
 
     Sun_vect_geod = R_geod - np.stack([0,0,z0])
     s_norm = Sun_vect_geod.ravel() / norm(Sun_vect_geod)  # normalized vector (sun_hat) {1×3}
